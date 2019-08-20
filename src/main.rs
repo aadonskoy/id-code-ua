@@ -3,30 +3,37 @@ extern crate scoped_threadpool;
 
 use id_code_ua::*;
 use scoped_threadpool::Pool;
+use std::fs::File;
+use std::io::prelude::*;
+use std::sync::{Arc, Mutex};
 
 fn main() {
     let threads: usize = 100;
     let step: u32 = (100_000_000 - ID_LOWEST) / threads as u32;
-    let mut ress: Vec<Vec<u32>> = Vec::with_capacity(threads + 1);
+    let res = Arc::new(Mutex::new(vec![]));
 
     let mut pool = Pool::new(threads as u32);
     pool.scoped(|scoped| {
-        for piece in 0..threads {
-            let begin = ID_LOWEST + piece as u32 * step;
+        for ind in 0..threads {
+            let clone = Arc::clone(&res);
+            let begin = ID_LOWEST + ind as u32 * step;
             let end = begin + step;
-            println!("{}: {} - {}", piece, begin, end);
+            println!("{}: {} - {}", ind, begin, end);
 
             scoped.execute(move || {
-                let mut r: Vec<u32> = vec![];
+                let mut wrkr = clone.lock().unwrap();
                 for id in begin..end {
                     let valid = is_valid(id);
-                    if valid {
-                        r.push(id);
+                    if !valid {
+                        wrkr.push(id);
                     }
                 }
-                println!("{:?}", r);
             });
         }
     });
-    println!("{:?}", ress);
+    let mut file = File::create("codes.txt").unwrap();
+    let vv: Vec<u32> = res.clone().lock().unwrap().to_vec();
+    for i in &vv {
+        write!(file, "{}\n", i).expect("Can't write");
+    }
 }
